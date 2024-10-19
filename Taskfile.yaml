@@ -1,0 +1,118 @@
+version: '3'
+
+vars:
+  # Concatenation
+  CONCAT_DIRECTORY: '{{.ROOT_DIR}}/'
+  CONCAT_INCLUDE_PATTERNS: 'pkg/healthcheck/*,pkg/proxy/*,cmd/server/*,internal/auth/*,internal/config/*,internal/handlers/*,internal/ratelimit/*,internal/errors/*,Dockerfile,docker-compose.yaml,hack/*'
+
+  PLATFORMS: linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+  CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
+  BUILDER_NAME: "project-v3-builder"
+  IMG: '{{.IMG | default "jaceroio/basic-auth-sidecar:v0.0.0-latest"}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Run go fmt against code
+    cmds:
+      - go fmt {{.ROOT_DIR}}/...
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    env:
+      CGO_ENABLED: 1
+    sources:
+      - './**/*.go'
+    generates:
+      - coverage.out
+
+  cover:
+    desc: Display test coverage
+    deps: [test]
+    cmds:
+      - go tool cover -func=coverage.out
+      - go tool cover -html=coverage.out -o coverage.html
+    sources:
+      - coverage.out
+    generates:
+      - coverage.html
+
+  docker-build-base:
+    internal: true
+    cmds:
+      - |
+        if ! {{.CONTAINER_TOOL}} buildx inspect {{.BUILDER_NAME}} > /dev/null 2>&1; then
+          {{.CONTAINER_TOOL}} buildx create --name {{.BUILDER_NAME}} --use
+        else
+          {{.CONTAINER_TOOL}} buildx use {{.BUILDER_NAME}}
+        fi
+      - |
+        BUILD_ARGS="--tag {{.IMG}} {{.EXTRA_BUILD_ARGS}}"
+        if [ "{{.PUSH}}" = "true" ]; then
+          echo "Building and pushing {{.BUILD_TYPE}} image..."
+          {{.CONTAINER_TOOL}} buildx build $BUILD_ARGS --push {{.ROOT_DIR}}/.
+        else
+          echo "Building {{.BUILD_TYPE}} image without pushing..."
+          {{.CONTAINER_TOOL}} buildx build $BUILD_ARGS --load {{.ROOT_DIR}}/.
+        fi
+    vars:
+      PUSH: '{{.PUSH | default "false"}}'
+      EXTRA_BUILD_ARGS: ''
+      BUILD_TYPE: 'docker'
+
+  docker-build:
+    desc: Build docker image locally
+    cmds:
+      - task: docker-build-base
+        vars:
+          BUILD_TYPE: 'amd64'
+          PUSH: '{{.PUSH | default "true"}}'
+    sources:
+      - '{{.ROOT_DIR}}/Dockerfile'
+    generates:
+      - '{{.IMG}}'
+
+  docker-build-multi:
+    desc: Build docker image for the manager with cross-platform support
+    cmds:
+      - task: docker-build-base
+        vars:
+          BUILD_TYPE: 'multi-platform'
+          EXTRA_BUILD_ARGS: '--platform={{.PLATFORMS}}'
+    vars:
+      PLATFORMS: '{{.PLATFORMS | default "linux/amd64,linux/arm64"}}'
+
+  concat:
+    desc: |
+      Concatenate project files based on include and exclude patterns.
+      
+      This task processes files in the specified directory, filtering them based on
+      include and exclude patterns, and concatenates their contents into a single output file.
+      It also removes multiline comments from the concatenated content.
+
+      Usage:
+        task concat
+
+      To override default patterns or directory:
+        task concat CONCAT_EXCLUDE_PATTERNS='pattern1,pattern2' CONCAT_INCLUDE_PATTERNS='pattern3,pattern4' CONCAT_DIRECTORY='./src/'
+
+      Variables:
+        CONCAT_EXCLUDE_PATTERNS: Comma-separated list of patterns to exclude
+        CONCAT_INCLUDE_PATTERNS: Comma-separated list of patterns to include
+        CONCAT_DIRECTORY: Directory to process (should end with a slash)
+
+      Output:
+        The concatenated content is written to 'concatenated_output.txt' in the current directory.
+
+    cmds:
+      - |
+        CONCAT_EXCLUDE_PATTERNS="{{.CONCAT_EXCLUDE_PATTERNS}}" \
+        CONCAT_INCLUDE_PATTERNS="{{.CONCAT_INCLUDE_PATTERNS}}" \
+        CONCAT_DIRECTORY="{{.CONCAT_DIRECTORY}}" \
+        sh {{.TASKFILE_DIR}}/.tasks/concat.sh
+    silent: false

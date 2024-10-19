@@ -23,3 +23,10 @@ go.work.sum
 
 # env file
 .env
+
+# Docker
+webtop
+code-server
+
+# Other
+concatenated_output.txt

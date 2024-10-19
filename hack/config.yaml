@@ -1,0 +1,22 @@
+# Basic Auth Sidecar Configuration
+
+# Authentication credentials
+auth:
+  username: user
+  password: pass
+
+# Server configuration
+server:
+  grpc_port: 9001
+  http_port: 8080
+
+# Logging configuration
+logging:
+  level: info
+
+# Rate limiting configuration
+rate_limit:
+  requests_per_second: 5
+  burst: 10
+  cleanup_interval: 5m
+  max_inactivity: 1h

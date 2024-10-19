@@ -1,0 +1,69 @@
+services:
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - ./hack/envoy_config.yaml:/etc/envoy/envoy.yaml
+    depends_on:
+      - auth-sidecar
+      - webtop
+      - code-server
+    networks:
+      - internal
+
+  auth-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - AUTH_USERNAME=user
+      - AUTH_PASSWORD=pass
+    volumes:
+      - ./hack/config.yaml:/config/config.yaml
+    networks:
+      - internal
+
+  podinfo:
+    image: stefanprodan/podinfo:latest
+    ports:
+      - "9898"
+    networks:
+      - internal
+
+  webtop:
+    image: lscr.io/linuxserver/webtop:debian-xfce
+    ports:
+      - "3000:3000"
+    networks:
+      - internal
+    security_opt:
+      - seccomp:unconfined #optional
+    shm_size: "1gb"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - SUBFOLDER=/webtop/
+      - KEYBOARD=en-se-qwerty
+    volumes:
+      - ./webtop:/config
+      - /var/run/docker.sock:/var/run/docker.sock #optional
+
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    ports:
+      - "8443:8443"
+    networks:
+      - internal
+    # environment:
+    #   - PASSWORD=your_password_here
+    volumes:
+      - ./code-server:/home/coder/project
+
+networks:
+  internal:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
