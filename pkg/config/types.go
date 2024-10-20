@@ -1,12 +1,19 @@
-package v3
+package config
 
 import "time"
 
 // Config represents the top-level structure of the basic-auth-sidecar configuration
 type Config struct {
+    Auth      AuthConfig      `yaml:"auth"`
     Server    ServerConfig    `yaml:"server"`
     Logging   LoggingConfig   `yaml:"logging"`
     RateLimit RateLimitConfig `yaml:"rate_limit"`
+}
+
+// AuthConfig represents the authentication configuration section
+type AuthConfig struct {
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
 }
 
 // ServerConfig represents the server configuration section
